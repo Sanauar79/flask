@@ -3,6 +3,7 @@ from flask import send_file
 from flask_migrate import Migrate
 from itsdangerous import URLSafeTimedSerializer
 from flask_mail import Mail, Message
+from sqlalchemy import String, Integer, DateTime
 import csv
 import io
 from flask_sqlalchemy import SQLAlchemy
@@ -12,13 +13,18 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime
+import os
 
 
 app = Flask(__name__)
-app.config['SQLALCHEMY_DATABASE_URI'] = (
-    "mssql+pyodbc://myflaskuser:Sanauar@123@localhost/UserDB"
-    "?driver=ODBC+Driver+17+for+SQL+Server"
-)
+
+uri = os.environ.get('DATABASE_URL')
+if uri and uri.startswith("postgres://"):
+    uri = uri.replace("postgres://", "postgresql://", 1)
+app.config['SQLALCHEMY_DATABASE_URI'] = uri
+
+app.config['SQLALCHEMY_DATABASE_URI'] =  os.environ.get('DATABASE_URL')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 migrate = Migrate(app, db)
 app.secret_key = 'secret_key'
@@ -35,6 +41,7 @@ mail = Mail(app)
 serializer = URLSafeTimedSerializer(app.secret_key)
 
 class User(db.Model):
+    __tablename__ = 'user'
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(100), unique=True)
@@ -42,6 +49,8 @@ class User(db.Model):
     is_verified = db.Column(db.Boolean, default=False)
     verification_token = db.Column(db.String(64), unique=True, nullable=True)
     role = db.Column(db.String(10), default='user') 
+
+    contacts = db.relationship('Contact', backref='user', lazy=True)
 
     def __init__(self,name,email,password,role='user'):
         self.name = name
@@ -58,7 +67,7 @@ class Contact(db.Model):
     email = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text, nullable=False)
-    date_sent = db.Column(db.DateTime, default=datetime.utcnow)
+    date = db.Column(db.DateTime, default=datetime.utcnow)
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
     def __init__(self,name,email,phone,description,user_id):
@@ -72,8 +81,9 @@ class Contact(db.Model):
 
    
 
-with app.app_context():
-    db.create_all()
+# with app.app_context():
+#     db.create_all()
+#     print("Database tables created.")
 
 
 @app.route('/')
